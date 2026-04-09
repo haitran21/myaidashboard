@@ -68,6 +68,49 @@ with st.sidebar:
     if st.button("♻️ Refresh All Data"):
         st.cache_data.clear()
         st.rerun()
+import streamlit as st
+from vnstock import *
+
+# 1. Hàm lấy giá vàng
+def get_vietnam_gold_price():
+    try:
+        # Sử dụng hàm gold_price từ vnstock
+        df = gold_price()
+        # Thông thường df sẽ trả về giá SJC, Nhẫn của các thương hiệu lớn
+        return df
+    except:
+        return None
+
+# 2. Hiển thị lên Dashboard (Nên đặt trong một st.container hoặc cột)
+st.subheader("💰 Thị trường Vàng Việt Nam")
+
+gold_data = get_vietnam_gold_price()
+
+if gold_data is not None:
+    # Tạo 3 cột để hiển thị các loại vàng phổ biến
+    col1, col2, col3 = st.columns(3)
+    
+    # Giả sử lấy dữ liệu từ dòng đầu tiên (SJC)
+    # Tùy vào cấu trúc df của vnstock, bạn có thể điều chỉnh index
+    try:
+        with col1:
+            sjc = gold_data.iloc[0] # Dòng đầu tiên thường là SJC
+            st.metric("Vàng SJC (Mua - Bán)", 
+                      f"{sjc['buy']:,}", 
+                      f"{sjc['sell']:,}", delta_color="off")
+            st.caption("Đơn vị: VNĐ/Lượng")
+            
+        with col2:
+            # Lọc vàng nhẫn nếu có trong bảng
+            ring = gold_data[gold_data['type'].str.contains('Nhẫn', na=False)].iloc[0]
+            st.metric("Vàng Nhẫn (Mua - Bán)", 
+                      f"{ring['buy']:,}", 
+                      f"{ring['sell']:,}", delta_color="off")
+    except:
+        st.write("Đang cập nhật dữ liệu chi tiết...")
+        st.table(gold_data) # Hiển thị dạng bảng nếu không lọc được
+else:
+    st.error("Không thể kết nối nguồn dữ liệu vàng hiện tại.")
 
 # --- 4. NGUỒN TIN (AI AGENT - MỤC 2) ---
 RSS_SOURCES = {
