@@ -7,3 +7,4 @@ feedparser
 google-generativeai
 requests
 numpy
+beautifulsoup4
