@@ -14,7 +14,7 @@ st.set_page_config(page_title="AI Intelligence OS", layout="wide", page_icon="�
 if not hasattr(np, 'bool8'): np.bool8 = np.bool_
 
 # Cấu hình API Key (Khuyên dùng: Đưa vào Secrets khi lên Cloud)
-genai.configure(api_key="AIzaSyAf6Gwd8e2i9njG9r7G81PefKTEDNUz184")
+genai.configure(api_key=st.secrets["AIzaSyAf6Gwd8e2i9njG9r7G81PefKTEDNUz184"])
 
 # --- 2. CÁC HÀM CÔNG CỤ (UTILITIES) ---
 def fetch_rss(url):
@@ -37,7 +37,7 @@ def ai_agent_process(content, mode="summarize"):
         
         response = model.generate_content(prompt)
         return response.text
-    except: return "⚠️ AI Agent đang bận."
+    except: return "⚠️ AI Agent hết xèng."
 
 @st.cache_data(ttl=600)
 def get_macro_data():
