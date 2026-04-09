@@ -2,96 +2,134 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
-from vnstock import *
+from vnstock import Vnstock
 import feedparser
 import numpy as np
 import google.generativeai as genai
 import requests
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# --- 1. CẤU HÌNH ---
-st.set_page_config(page_title="AI Thư Bùi", layout="wide")
-
+# --- 1. CẤU HÌNH HỆ THỐNG & UI ---
+st.set_page_config(page_title="AYE Thư Bùi", layout="wide", page_icon="💖")
 if not hasattr(np, 'bool8'): np.bool8 = np.bool_
 
-try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-except:
-    st.error("Lỗi: Chưa có GEMINI_API_KEY trong Secrets.")
+# Cấu hình API Key (Khuyên dùng: Đưa vào Secrets khi lên Cloud)
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# --- 2. HÀM LẤY GIÁ VÀNG (PHƯƠNG PHÁP MỚI - KHÔNG LO LỖI) ---
-@st.cache_data(ttl=600)
-def get_gold_vietnam_fixed():
-    """Cào dữ liệu trực tiếp để tránh lỗi thư viện vnstock"""
+# --- 2. CÁC HÀM CÔNG CỤ (UTILITIES) ---
+def fetch_rss(url):
     try:
-        # Thử dùng vnstock trước
-        df = gold_price()
-        if df is not None and not df.empty:
-            return df
-    except:
-        pass
-    
-    # Nếu vnstock lỗi, trả về dữ liệu mẫu để Dashboard không bị trắng xóa
-    # (Hoặc bạn có thể dùng công cụ cào web ở đây)
-    return None
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=10)
+        return feedparser.parse(response.content)
+    except: return None
 
-def ai_process(content):
+def ai_agent_process(content, mode="summarize"):
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        return model.generate_content(f"Tóm tắt ngắn gọn tiếng Việt: {content}").text
-    except:
-        return "AI đang bận."
-
-# --- 3. SIDEBAR ---
-with st.sidebar:
-    st.title("📊 Vĩ mô Thế giới")
-    # Lấy nhanh giá vàng thế giới từ Yahoo Finance
-    try:
-        g_price = yf.Ticker("GC=F").history(period="1d")['Close'].iloc[-1]
-        st.metric("Vàng TG (USD/oz)", f"${g_price:,.1f}")
-    except: st.write("Đang tải giá thế giới...")
-
-# --- 4. GIAO DIỆN CHÍNH ---
-st.title("🚀 Smart Dashboard 2026")
-
-t1, t2, t3 = st.tabs(["📰 Tin Tức", "📈 Chứng Khoán", "🟡 Vàng Việt Nam"])
-
-with t1:
-    st.subheader("Tin tức cập nhật")
-    f = feedparser.parse("https://vnexpress.net/rss/tin-moi-nhat.rss")
-    for e in f.entries[:5]:
-        with st.expander(e.title):
-            st.write(e.summary)
-            if st.button("Tóm tắt", key=e.link):
-                st.info(ai_process(e.title + e.summary))
-
-with t2:
-    st.subheader("Phân tích VN30")
-    if st.button("Quét mã"):
-        stocks = ['FPT', 'HPG', 'SSI', 'VNM']
-        for s in stocks:
-            try:
-                # Dùng hàm đơn giản nhất của vnstock
-                df = stock_historical_data(symbol=s, start_date='2026-01-01', end_date='2026-04-09')
-                st.write(f"**{s}**: {df['close'].iloc[-1]:,.0f} VND")
-            except: st.write(f"Lỗi tải mã {s}")
-
-with t3:
-    st.subheader("Giá vàng trong nước")
-    # Giải pháp hiển thị bảng giá vàng an toàn
-    gold_df = get_gold_vietnam_fixed()
-    
-    if gold_df is not None:
-        st.dataframe(gold_df, use_container_width=True)
-    else:
-        # Kế hoạch B: Nếu không lấy được data, hiển thị thông tin trực tiếp từ một nguồn uy tín qua Link
-        st.warning("⚠️ Không thể kết nối trực tiếp với máy chủ SJC/Doji.")
-        st.info("Bạn có thể theo dõi giá vàng Việt Nam chính xác nhất tại đây:")
-        st.markdown("[👉 Xem giá vàng trực tuyến (SJC)](https://sjc.com.vn/gia-vang-tu-do.html)")
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        target = "models/gemini-1.5-flash" if "models/gemini-1.5-flash" in available_models else available_models[0]
+        model = genai.GenerativeModel(target)
         
-        # Hiển thị một khung nhỏ giá vàng TG quy đổi để tham khảo
-        if 'g_price' in locals():
-            ti_gia = 25400 # Tỷ giá ước tính 2026
-            gia_quy_doi = (g_price / 0.829) * ti_gia / 1000000
-            st.metric("Giá vàng TG quy đổi (Tham khảo)", f"~{gia_quy_doi:,.1f} triệu/lượng")
+        if mode == "summarize":
+            prompt = f"Tóm tắt 3-5 ý chính tiếng Việt: {content}"
+        elif mode == "sentiment":
+            prompt = f"Phân tích tin tức chứng khoán sau và trả về điểm số từ -1 (Rất xấu) đến 1 (Rất tốt), kèm lý do ngắn: {content}"
+        
+        response = model.generate_content(prompt)
+        return response.text
+    except: return "⚠️ AI Agent đang bận."
+
+@st.cache_data(ttl=600)
+def get_macro_data():
+    tickers = {"Vàng": "GC=F", "Bitcoin": "BTC-USD", "USD/VND": "VND=X"}
+    results = {}
+    for name, sym in tickers.items():
+        try:
+            data = yf.Ticker(sym).history(period="2d")
+            price = data['Close'].iloc[-1]
+            change = price - data['Close'].iloc[-2]
+            results[name] = (price, change)
+        except: results[name] = (0, 0)
+    return results
+
+# --- 3. SIDEBAR (UI/UX - MỤC 4) ---
+with st.sidebar:
+    st.title("⚙️ AI Control Center")
+    user_keyword = st.text_input("🔍 Bộ lọc Agent (Từ khóa)", "").lower()
+    st.divider()
+    
+    st.subheader("📊 Chỉ số vĩ mô")
+    macro = get_macro_data()
+    st.metric("Vàng Thế Giới", f"${macro['Vàng'][0]:,.2f}", f"{macro['Vàng'][1]:+.2f}")
+    st.metric("Bitcoin", f"${macro['Bitcoin'][0]:,.0f}", f"{macro['Bitcoin'][1]:+.2f}")
+    st.metric("Tỷ giá USD/VND", f"{macro['USD/VND'][0]:,.0f}đ")
+    
+    st.divider()
+    if st.button("♻️ Refresh All Data"):
+        st.cache_data.clear()
+        st.rerun()
+
+# --- 4. NGUỒN TIN (AI AGENT - MỤC 2) ---
+RSS_SOURCES = {
+    "📰 Tổng hợp": {
+        "VnExpress": "https://vnexpress.net/rss/tin-moi-nhat.rss",
+        "24h.com.vn": "https://www.24h.com.vn/upload/rss/tintuctrongngay.rss",
+        "Kênh 14": "https://kenh14.vn/rss/star.rss"
+    },
+    "🤖 AI News": {
+        "The Rundown AI": "https://www.therundown.ai/feed",
+        "OpenAI": "https://openai.com/news/rss.xml",
+        "Hugging Face": "https://huggingface.co/blog/feed.xml"
+    },
+    "📐 Kiến trúc": {
+        "ArchDaily": "https://www.archdaily.com/feed",
+        "Dezeen": "https://www.dezeen.com/feed/",
+        "Tạp chí Kiến trúc": "https://www.tapchikientruc.com.vn/feed"
+    },
+    "⚽ Thể thao": {
+        "Goal": "https://www.goal.com/feeds/en/news",
+        "Sport5": "https://sport5.vn/rss/tin-moi.rss"
+    }
+}
+
+# --- 5. HIỂN THỊ CHÍNH ---
+t_news, t_finance = st.tabs(["🌐 Tin Tức Thông Minh", "📈 Phân Tích Tài Chính"])
+
+with t_news:
+    # Lọc danh mục tin
+    cat_cols = st.columns(len(RSS_SOURCES))
+    for i, (category, sources) in enumerate(RSS_SOURCES.items()):
+        with cat_cols[i]:
+            st.header(category)
+            for name, url in sources.items():
+                feed = fetch_rss(url)
+                if feed:
+                    for entry in feed.entries[:3]:
+                        # Logic lọc từ khóa (AI Agent)
+                        if user_keyword in entry.title.lower() or user_keyword == "":
+                            with st.expander(f"{name}: {entry.title[:50]}..."):
+                                st.write(entry.get('summary', '')[:200] + "...")
+                                if st.button("🤖 Agent Tóm tắt", key=entry.link):
+                                    st.info(ai_agent_process(entry.title + entry.summary))
+                                st.markdown(f"[Link gốc]({entry.link})")
+
+with t_finance:
+    st.header("📈 Phân tích Sentiment & RSI (VN30)")
+    if st.button("Bắt đầu quét chu kỳ mới"):
+        vn30 = ['FPT', 'HPG', 'SSI', 'VNM', 'VIC', 'VHM', 'TCB', 'MWG']
+        res = []
+        progress = st.progress(0)
+        for idx, s in enumerate(vn30):
+            try:
+                # 1. Lấy dữ liệu kỹ thuật
+                d = Vnstock().stock(symbol=s, source='VCI').quote.history(start='2026-01-01', end='2026-04-09')
+                rsi = ta.rsi(d['close']).iloc[-1]
+                
+                # 2. Phân tích Sentiment (Mục 1)
+                # Giả lập lấy tin liên quan mã chứng khoán (có thể mở rộng thêm)
+                sentiment = ai_agent_process(f"Cổ phiếu {s}", mode="sentiment")
+                
+                res.append({"Mã": s, "Giá": d['close'].iloc[-1], "RSI": round(rsi, 2), "AI Nhận định": sentiment})
+            except: continue
+            progress.progress((idx + 1) / len(vn30))
+        st.table(pd.DataFrame(res))
