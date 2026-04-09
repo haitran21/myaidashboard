@@ -1,0 +1,9 @@
+streamlit
+yfinance
+pandas
+pandas_ta
+vnstock
+feedparser
+google-generativeai
+requests
+numpy
