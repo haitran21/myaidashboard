@@ -112,6 +112,16 @@ if gold_data is not None:
 else:
     st.error("Không thể kết nối nguồn dữ liệu vàng hiện tại.")
 
+tab1, tab2, tab3 = st.tabs(["📈 Chứng Khoán", "🟡 Vàng & Ngoại Tệ", "📰 Tin Tức AI"])
+
+with tab1:
+    # Chứa code chứng khoán cũ của bạn
+    pass
+
+with tab2:
+    st.header("Cập nhật Giá Vàng & Tỷ giá USD")
+    # Dán đoạn code lấy giá vàng ở Bước 2 vào đây
+
 # --- 4. NGUỒN TIN (AI AGENT - MỤC 2) ---
 RSS_SOURCES = {
     "📰 Tổng hợp": {
