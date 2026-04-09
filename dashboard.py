@@ -10,7 +10,7 @@ import requests
 from datetime import datetime
 
 # --- 1. CẤU HÌNH HỆ THỐNG & UI ---
-st.set_page_config(page_title="AI Intelligence OS", layout="wide", page_icon="🌐")
+st.set_page_config(page_title="aye Thư Bùi", layout="wide", page_icon="🌐")
 if not hasattr(np, 'bool8'): np.bool8 = np.bool_
 
 # Cấu hình API Key (Khuyên dùng: Đưa vào Secrets khi lên Cloud)
